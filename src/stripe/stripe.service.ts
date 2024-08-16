@@ -54,19 +54,47 @@ export class StripeService {
   async handlePaymentWebhook(event: Stripe.Event): Promise<void> {
     switch (event.type) {
       case 'invoice.payment_succeeded':
-        const invoice = event.data.object as Stripe.Invoice;
-        await this.handleInvoicePaymentSucceeded(invoice);
+        const invoicePayment = event.data.object as Stripe.Invoice;
+        await this.handleInvoicePaymentSucceeded(invoicePayment);
         break;
-      case 'checkout.session.completed':
-        const session = event.data.object as Stripe.Checkout.Session;
-        await this.handleCheckoutSessionCompleted(session);
+      case 'charge.succeeded':
+        const charge = event.data.object as Stripe.Charge;
+        await this.handleChargeSucceeded(charge);
         break;
+      case 'invoice.paid':
+        const invoicePaid = event.data.object as Stripe.Invoice;
+        await this.handleInvoicePaid(invoicePaid);
+        break;
+
       default:
         console.log(`Unhandled event type ${event.type}`);
     }
   }
 
   private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+    await this.processPayment(invoice);
+  }
+
+  private async handleChargeSucceeded(charge: Stripe.Charge) {
+    const paymentIntentId = charge.payment_intent as string;
+    const paymentIntent =
+      await this.stripe.paymentIntents.retrieve(paymentIntentId);
+    const invoiceId = paymentIntent.invoice as string;
+
+    if (!invoiceId) {
+      console.log(`Invoice not found for payment intent ${paymentIntentId}`);
+      return;
+    }
+
+    const invoice = await this.stripe.invoices.retrieve(invoiceId);
+    await this.processPayment(invoice);
+  }
+
+  private async handleInvoicePaid(invoice: Stripe.Invoice) {
+    await this.processPayment(invoice);
+  }
+
+  private async processPayment(invoice: Stripe.Invoice) {
     const subscriptionId = invoice.subscription as string;
 
     const existingPayment = await this.prismaService.payments.findUnique({
@@ -96,11 +124,7 @@ export class StripeService {
     });
 
     const oldDate = oldPeriods ? oldPeriods.endDate.getTime() : Date.now();
-
     const newEndDate = new Date(oldDate + additionalDays * 24 * 60 * 60 * 1000);
-
-    console.log(oldPeriods.endDate);
-    console.log(newEndDate);
 
     await this.updateAccessPeriod(
       subscription.user.id,
@@ -131,12 +155,6 @@ export class StripeService {
       default:
         return 30;
     }
-  }
-
-  private async handleCheckoutSessionCompleted(
-    session: Stripe.Checkout.Session,
-  ) {
-    console.log(session);
   }
 
   private async updateAccessPeriod(

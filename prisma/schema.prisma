@@ -23,6 +23,8 @@ model users {
   accessPeriods accessPeriods[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+
+  @@index([stripeId])
 }
 
 model subscriptions {
@@ -37,6 +39,10 @@ model subscriptions {
   payments    payments[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate])
 }
 
 model payments {
@@ -49,6 +55,11 @@ model payments {
   amount          Float
   status          String
   createdAt       DateTime      @default(now())
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model accessPeriods {
@@ -58,4 +69,7 @@ model accessPeriods {
   startDate DateTime
   endDate   DateTime
   createdAt DateTime @default(now())
+
+  @@index([startDate])
+  @@index([endDate])
 }
